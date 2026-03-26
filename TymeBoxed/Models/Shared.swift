@@ -1,0 +1,242 @@
+import FamilyControls
+import Foundation
+
+enum SharedData {
+  private static let suite = UserDefaults(
+    suiteName: "group.dev.ambitionsoftware.tymeboxed"
+  )!
+
+  // MARK: – Keys
+  private enum Key: String {
+    case profileSnapshots
+    case activeScheduleSession
+    case completedScheduleSessions
+    case deviceSyncId
+    case deviceSyncEnabled
+  }
+
+  // MARK: – Serializable snapshot of a profile (no sessions)
+  struct ProfileSnapshot: Codable, Equatable {
+    var id: UUID
+    var name: String
+    var selectedActivity: FamilyActivitySelection
+    var createdAt: Date
+    var updatedAt: Date
+    var blockingStrategyId: String?
+    var strategyData: Data?
+    var order: Int
+
+    var enableLiveActivity: Bool
+    var reminderTimeInSeconds: Int?
+    var customReminderMessage: String?
+    var enableBreaks: Bool
+    var breakTimeInMinutes: Int = 15
+    var enableStrictMode: Bool
+    var enableAllowMode: Bool
+    var enableAllowModeDomains: Bool
+    var enableSafariBlocking: Bool
+
+    var domains: [String]?
+    var physicalUnblockNFCTagId: String?
+    var physicalUnblockQRCodeId: String?
+
+    var schedule: BlockedProfileSchedule?
+
+    var disableBackgroundStops: Bool?
+  }
+
+  // MARK: – Serializable snapshot of a session (no profile object)
+  struct SessionSnapshot: Codable, Equatable {
+    var id: String
+    var tag: String
+    var blockedProfileId: UUID
+
+    var startTime: Date
+    var endTime: Date?
+
+    var breakStartTime: Date?
+    var breakEndTime: Date?
+
+    var pauseStartTime: Date?
+    var pauseEndTime: Date?
+
+    var forceStarted: Bool
+  }
+
+  // MARK: – Persisted snapshots keyed by profile ID (UUID string)
+  static var profileSnapshots: [String: ProfileSnapshot] {
+    get {
+      guard let data = suite.data(forKey: Key.profileSnapshots.rawValue) else { return [:] }
+      return (try? JSONDecoder().decode([String: ProfileSnapshot].self, from: data)) ?? [:]
+    }
+    set {
+      if let data = try? JSONEncoder().encode(newValue) {
+        suite.set(data, forKey: Key.profileSnapshots.rawValue)
+      } else {
+        suite.removeObject(forKey: Key.profileSnapshots.rawValue)
+      }
+    }
+  }
+
+  static func snapshot(for profileID: String) -> ProfileSnapshot? {
+    profileSnapshots[profileID]
+  }
+
+  static func setSnapshot(_ snapshot: ProfileSnapshot, for profileID: String) {
+    var all = profileSnapshots
+    all[profileID] = snapshot
+    profileSnapshots = all
+  }
+
+  static func removeSnapshot(for profileID: String) {
+    var all = profileSnapshots
+    all.removeValue(forKey: profileID)
+    profileSnapshots = all
+  }
+
+  // MARK: – Persisted array of scheduled sessions
+  static var completedSessionsInSchedular: [SessionSnapshot] {
+    get {
+      guard let data = suite.data(forKey: Key.completedScheduleSessions.rawValue) else { return [] }
+      return (try? JSONDecoder().decode([SessionSnapshot].self, from: data)) ?? []
+    }
+    set {
+      if let data = try? JSONEncoder().encode(newValue) {
+        suite.set(data, forKey: Key.completedScheduleSessions.rawValue)
+      } else {
+        suite.removeObject(forKey: Key.completedScheduleSessions.rawValue)
+      }
+    }
+  }
+
+  // MARK: – Persisted array of scheduled sessions
+  static var activeSharedSession: SessionSnapshot? {
+    get {
+      guard let data = suite.data(forKey: Key.activeScheduleSession.rawValue) else { return nil }
+      return (try? JSONDecoder().decode(SessionSnapshot.self, from: data)) ?? nil
+    }
+    set {
+      if let data = try? JSONEncoder().encode(newValue) {
+        suite.set(data, forKey: Key.activeScheduleSession.rawValue)
+      } else {
+        suite.removeObject(forKey: Key.activeScheduleSession.rawValue)
+      }
+    }
+  }
+
+  static func createSessionForSchedular(for profileID: UUID) {
+    activeSharedSession = SessionSnapshot(
+      id: UUID().uuidString,
+      tag: profileID.uuidString,
+      blockedProfileId: profileID,
+      startTime: Date(),
+      endTime: nil,
+      breakStartTime: nil,
+      breakEndTime: nil,
+      pauseStartTime: nil,
+      pauseEndTime: nil,
+      forceStarted: true)
+  }
+
+  static func createActiveSharedSession(for session: SessionSnapshot) {
+    activeSharedSession = session
+  }
+
+  static func getActiveSharedSession() -> SessionSnapshot? {
+    activeSharedSession
+  }
+
+  static func endActiveSharedSession() {
+    guard var existingScheduledSession = activeSharedSession else { return }
+
+    existingScheduledSession.endTime = Date()
+    completedSessionsInSchedular.append(existingScheduledSession)
+
+    activeSharedSession = nil
+  }
+
+  static func flushActiveSession() {
+    activeSharedSession = nil
+  }
+
+  static func getCompletedSessionsForSchedular() -> [SessionSnapshot] {
+    completedSessionsInSchedular
+  }
+
+  static func flushCompletedSessionsForSchedular() {
+    completedSessionsInSchedular = []
+  }
+
+  static func setBreakStartTime(date: Date) {
+    activeSharedSession?.breakStartTime = date
+  }
+
+  static func setBreakEndTime(date: Date) {
+    activeSharedSession?.breakEndTime = date
+  }
+
+  static func setPauseStartTime(date: Date) {
+    guard var session = activeSharedSession else { return }
+    session.pauseStartTime = date
+    activeSharedSession = session
+  }
+
+  static func setPauseEndTime(date: Date) {
+    guard var session = activeSharedSession else { return }
+    session.pauseEndTime = date
+    activeSharedSession = session
+  }
+
+  static func resetPause() {
+    guard var session = activeSharedSession else { return }
+    session.pauseStartTime = nil
+    session.pauseEndTime = nil
+    activeSharedSession = session
+  }
+
+  static func setEndTime(date: Date) {
+    activeSharedSession?.endTime = date
+  }
+
+  /// Forces persistence to disk. Call after critical writes when app may be killed (e.g. pause start).
+  static func synchronize() {
+    suite.synchronize()
+  }
+
+  /// Clears all shared data (profiles, sessions, activity). Used when deleting account.
+  static func clearAllForAccountDeletion() {
+    profileSnapshots = [:]
+    activeSharedSession = nil
+    completedSessionsInSchedular = []
+    synchronize()
+  }
+
+  // MARK: - Device sync (same keys across processes via App Group)
+
+  /// Stable device id for CloudKit session records and profile origin metadata.
+  static var deviceSyncId: UUID {
+    get {
+      if let idString = suite.string(forKey: Key.deviceSyncId.rawValue),
+        let existing = UUID(uuidString: idString)
+      {
+        return existing
+      }
+      let newId = UUID()
+      suite.set(newId.uuidString, forKey: Key.deviceSyncId.rawValue)
+      synchronize()
+      return newId
+    }
+    set {
+      suite.set(newValue.uuidString, forKey: Key.deviceSyncId.rawValue)
+      synchronize()
+    }
+  }
+
+  static var deviceSyncEnabled: Bool {
+    get { suite.bool(forKey: Key.deviceSyncEnabled.rawValue) }
+    set {
+      suite.set(newValue, forKey: Key.deviceSyncEnabled.rawValue)
+      synchronize()
+    }
+  }
+}

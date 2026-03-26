@@ -1,0 +1,84 @@
+import SwiftData
+import SwiftUI
+
+class NFCManualBlockingStrategy: BlockingStrategy {
+  static var id: String = "NFCManualBlockingStrategy"
+
+  var name: String = "Tyme Boxed + Manual Start"
+  var description: String = "Lock manually, then scan the device to unlock."
+  var iconType: String = "key.fill"
+  var iconRotation: Angle = .degrees(35)
+  var color: Color = .yellow
+
+  var usesNFC: Bool = true
+  var hasManual: Bool = true
+  var hidden: Bool = false
+
+  var onSessionCreation: ((SessionStatus) -> Void)?
+  var onErrorMessage: ((String) -> Void)?
+
+  private let nfcScanner: NFCScannerUtil = NFCScannerUtil()
+  private let appBlocker: AppBlockerUtil = AppBlockerUtil()
+
+  func getIdentifier() -> String {
+    return NFCManualBlockingStrategy.id
+  }
+
+  func startBlocking(
+    context: ModelContext,
+    profile: BlockedProfiles,
+    forceStart: Bool?
+  ) -> (any View)? {
+    self.appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+
+    let activeSession =
+      BlockedProfileSession
+      .createSession(
+        in: context,
+        // Manually starting sessions, since nothing was scanned to start there is no tag to store for each session
+        withTag: ManualBlockingStrategy.id,
+        withProfile: profile,
+        forceStart: forceStart ?? false
+      )
+
+    self.onSessionCreation?(.started(activeSession))
+
+    return nil
+  }
+
+  func stopBlocking(
+    context: ModelContext,
+    session: BlockedProfileSession
+  ) -> (any View)? {
+    nfcScanner.onTagScanned = { tag in
+      let tagId = (tag.url ?? tag.id).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !tagId.isEmpty else { return }
+
+      Task { @MainActor in
+        let valid = await AuthenticationManager.shared.isNFCTagValidForUnlock(tagId: tagId)
+        guard valid else {
+          self.onErrorMessage?(
+            "Unregistered device detected. Please switch to a Tyme Box Device."
+          )
+          return
+        }
+        if let physicalUnblockNFCTagId = session.blockedProfile.physicalUnblockNFCTagId,
+          physicalUnblockNFCTagId != tagId
+        {
+          self.onErrorMessage?(
+            "This NFC tag is not allowed to unblock this profile. Physical unblock setting is on for this profile"
+          )
+          return
+        }
+        session.endSession()
+        try? context.save()
+        self.appBlocker.deactivateRestrictions()
+        self.onSessionCreation?(.ended(session.blockedProfile))
+      }
+    }
+
+    nfcScanner.scan(profileName: session.blockedProfile.name)
+
+    return nil
+  }
+}

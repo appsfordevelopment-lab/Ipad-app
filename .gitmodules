@@ -1,0 +1,6 @@
+[submodule "Backend/TymeBoxed"]
+	path = Backend/TymeBoxed
+	url = https://github.com/appsfordevelopment-lab/Tyme_Boxed.git
+[submodule "Backend/Tyme_Boxed"]
+	path = Backend/Tyme_Boxed
+	url = https://github.com/appsfordevelopment-lab/Tyme_Boxed.git
