@@ -17,23 +17,10 @@ struct BlockedProfileCardList: View {
   var onStatsTapped: (BlockedProfiles) -> Void
   var onBreakTapped: (BlockedProfiles) -> Void
   var onAppSelectionTapped: ((BlockedProfiles) -> Void)?
-  var onManageTapped: () -> Void
   var onEmergencyTapped: () -> Void
 
   private var titleMessage: String {
     isBlocking ? "Active Profile" : "Profile"
-  }
-
-  private var actionButtonText: String {
-    isBlocking ? "Emergency" : "Manage"
-  }
-
-  private var actionButtonIcon: String {
-    isBlocking ? "exclamationmark.triangle.fill" : "person.crop.circle"
-  }
-
-  private var actionButtonAction: () -> Void {
-    isBlocking ? onEmergencyTapped : onManageTapped
   }
 
   init(
@@ -50,7 +37,6 @@ struct BlockedProfileCardList: View {
     onStatsTapped: @escaping (BlockedProfiles) -> Void,
     onBreakTapped: @escaping (BlockedProfiles) -> Void,
     onAppSelectionTapped: ((BlockedProfiles) -> Void)? = nil,
-    onManageTapped: @escaping () -> Void,
     onEmergencyTapped: @escaping () -> Void
   ) {
     self.profiles = profiles
@@ -66,7 +52,6 @@ struct BlockedProfileCardList: View {
     self.onStatsTapped = onStatsTapped
     self.onBreakTapped = onBreakTapped
     self.onAppSelectionTapped = onAppSelectionTapped
-    self.onManageTapped = onManageTapped
     self.onEmergencyTapped = onEmergencyTapped
   }
 
@@ -74,9 +59,9 @@ struct BlockedProfileCardList: View {
     VStack(alignment: .leading, spacing: 10) {
       SectionTitle(
         titleMessage,
-        buttonText: actionButtonText,
-        buttonAction: { actionButtonAction() },
-        buttonIcon: actionButtonIcon,
+        buttonText: isBlocking ? "Emergency" : nil,
+        buttonAction: isBlocking ? onEmergencyTapped : nil,
+        buttonIcon: isBlocking ? "exclamationmark.triangle.fill" : nil,
         buttonBackgroundColor: isBlocking ? Color.emergencyLightRed : nil,
         buttonTextColor: isBlocking ? .white : nil
       )

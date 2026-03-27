@@ -1,83 +1,85 @@
 import SwiftUI
 
-struct Welcome: View {
+struct DashboardHeroCard: View {
   @EnvironmentObject var themeManager: ThemeManager
-  let onTap: () -> Void
+  let topLabel: String
+  let iconSystemName: String
+  let headline: String
+  var footnote: String? = nil
 
   var body: some View {
-    Button(action: onTap) {
-      VStack(alignment: .leading, spacing: 12) {
-        // Top row with category and icon
-        HStack {
-          Text("Physically block distracting apps ")
-            .font(.subheadline)
-            .fontWeight(.medium)
-            .foregroundColor(.primary)
-
-          Spacer()
-
-          Image(systemName: "hourglass")
-            .font(.body)
-            .foregroundColor(.white)
-            .padding(8)
-            .background(
-              Circle()
-                .fill(themeManager.themeColor.opacity(0.8))
-            )
-        }
-
-        Spacer()
-          .frame(height: 10)
-
-        // Title and subtitle
-        Text("Welcome to Tyme Boxed")
-          .font(.title)
-          .fontWeight(.bold)
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Text(topLabel)
+          .font(.subheadline)
+          .fontWeight(.medium)
           .foregroundColor(.primary)
 
-        Text(
-          "Tap here to get started on your first profile."
-        )
-        .font(.subheadline)
-        .foregroundColor(.secondary)
-        .lineLimit(3)
+        Spacer()
+
+        Image(systemName: iconSystemName)
+          .font(.body)
+          .foregroundColor(.white)
+          .padding(8)
+          .background(
+            Circle()
+              .fill(themeManager.themeColor.opacity(0.8))
+          )
       }
-      .padding(20)
-      .frame(maxWidth: .infinity, minHeight: 150)
-      .background(
-        RoundedRectangle(cornerRadius: 24)
-          .fill(Color(UIColor.systemBackground))
-          .overlay(
-            GeometryReader { geometry in
-              ZStack {
-                // Theme color circle blob
-                Circle()
-                  .fill(themeManager.themeColor.opacity(0.5))
-                  .frame(width: geometry.size.width * 0.5)
-                  .position(
-                    x: geometry.size.width * 0.9,
-                    y: geometry.size.height / 2
-                  )
-                  .blur(radius: 15)
-              }
-            }
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: 24)
-              .fill(.ultraThinMaterial.opacity(0.7))
-          )
-          .clipShape(RoundedRectangle(cornerRadius: 24))
-      )
+
+      Spacer()
+        .frame(height: 10)
+
+      Text(headline)
+        .font(.title)
+        .fontWeight(.bold)
+        .foregroundColor(.primary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      if let footnote, !footnote.isEmpty {
+        Text(footnote)
+          .font(.subheadline)
+          .foregroundColor(.secondary)
+          .lineLimit(3)
+      }
     }
-    .buttonStyle(ScaleButtonStyle())
+    .padding(20)
+    .frame(maxWidth: .infinity, minHeight: 150)
+    .background(
+      RoundedRectangle(cornerRadius: 24)
+        .fill(Color(UIColor.systemBackground))
+        .overlay(
+          GeometryReader { geometry in
+            ZStack {
+              Circle()
+                .fill(themeManager.themeColor.opacity(0.5))
+                .frame(width: geometry.size.width * 0.5)
+                .position(
+                  x: geometry.size.width * 0.9,
+                  y: geometry.size.height / 2
+                )
+                .blur(radius: 15)
+            }
+          }
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 24)
+            .fill(.ultraThinMaterial.opacity(0.7))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+    )
   }
 }
 
-struct ScaleButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-      .animation(.spring(response: 0.3), value: configuration.isPressed)
+struct IphoneCompanionSyncCard: View {
+  var body: some View {
+    DashboardHeroCard(
+      topLabel: "Sync with iPhone",
+      iconSystemName: "iphone",
+      headline:
+        "This is a companion app for your iPhone. Please create a profile on iPhone to sync.",
+      footnote: nil
+    )
   }
 }
 
@@ -85,7 +87,7 @@ struct ScaleButtonStyle: ButtonStyle {
   ZStack {
     Color.gray.opacity(0.1).ignoresSafeArea()
 
-    Welcome(onTap: {})
+    IphoneCompanionSyncCard()
       .padding(.horizontal)
       .environmentObject(ThemeManager.shared)
   }

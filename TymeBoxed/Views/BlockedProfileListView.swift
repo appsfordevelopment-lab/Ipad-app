@@ -12,6 +12,21 @@ struct BlockedProfileListView: View {
   ]) private var profiles: [BlockedProfiles]
 
   @State private var showingCreateProfile = false
+
+  private var createProfileSheetPresented: Binding<Bool> {
+    Binding(
+      get: {
+        showingCreateProfile && ProfileCreationAvailability.allowsLocalProfileCreation
+      },
+      set: { newValue in
+        if ProfileCreationAvailability.allowsLocalProfileCreation {
+          showingCreateProfile = newValue
+        } else {
+          showingCreateProfile = false
+        }
+      }
+    )
+  }
   @State private var showingDataExport = false
 
   @State private var profileToEdit: BlockedProfiles?
@@ -75,12 +90,14 @@ struct BlockedProfileListView: View {
               Image(systemName: "ellipsis.circle")
             }
           }
-          Button(action: { showingCreateProfile = true }) {
-            Image(systemName: "plus")
+          if ProfileCreationAvailability.allowsLocalProfileCreation {
+            Button(action: { showingCreateProfile = true }) {
+              Image(systemName: "plus")
+            }
           }
         }
       }
-      .sheet(isPresented: $showingCreateProfile) {
+      .sheet(isPresented: createProfileSheetPresented) {
         BlockedProfileView()
       }
       .sheet(item: $profileToEdit) { profile in

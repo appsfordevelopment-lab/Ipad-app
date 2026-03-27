@@ -12,6 +12,7 @@ struct HomeView: View {
   @EnvironmentObject var strategyManager: StrategyManager
   @EnvironmentObject var navigationManager: NavigationManager
   @EnvironmentObject var ratingManager: RatingManager
+  @EnvironmentObject private var profileSyncManager: ProfileSyncManager
 
   @ObservedObject private var syncConflictManager = SyncConflictManager.shared
 
@@ -23,11 +24,6 @@ struct HomeView: View {
     SortDescriptor(\BlockedProfiles.createdAt, order: .reverse),
   ]) private
     var profiles: [BlockedProfiles]
-  @State private var isProfileListPresent = false
-
-  // New profile view
-  @State private var showNewProfileView = false
-
   // Edit profile
   @State private var profileToEdit: BlockedProfiles? = nil
 
@@ -79,12 +75,12 @@ struct HomeView: View {
       case .activity:
         activityTabContent
           .refreshable {
-            loadApp()
+            await refreshSyncedContent()
           }
       case .profile:
         profileTabContent
           .refreshable {
-            loadApp()
+            await refreshSyncedContent()
           }
       case .settings:
         SettingsView(showsDismissButton: false)
@@ -94,11 +90,6 @@ struct HomeView: View {
       MainTabBar(selection: $selectedMainTab)
     }
     .padding(.top, 1)
-    .sheet(
-      isPresented: $isProfileListPresent,
-    ) {
-      BlockedProfileListView()
-    }
     .frame(
       minWidth: 0,
       maxWidth: .infinity,
@@ -160,11 +151,6 @@ struct HomeView: View {
     }
     .sheet(item: $profileToShowStats) { profile in
       ProfileInsightsView(profile: profile)
-    }
-    .sheet(
-      isPresented: $showNewProfileView,
-    ) {
-      BlockedProfileView(profile: nil)
     }
     .sheet(isPresented: $strategyManager.showCustomStrategyView) {
       BlockingStrategyActionView(
@@ -261,17 +247,8 @@ struct HomeView: View {
         }
 
         if profiles.isEmpty {
-          Welcome(onTap: {
-            showNewProfileView = true
-          })
-          .padding(.horizontal, 16)
-          .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-              let descriptor = FetchDescriptor<BlockedProfiles>()
-              guard let count = try? context.fetchCount(descriptor), count == 0 else { return }
-              showNewProfileView = true
-            }
-          }
+          IphoneCompanionSyncCard()
+            .padding(.horizontal, 16)
         }
 
         if !profiles.isEmpty {
@@ -301,9 +278,6 @@ struct HomeView: View {
             onAppSelectionTapped: { profile in
               appSelectionProfile = profile
               showAppSelectionSheet = true
-            },
-            onManageTapped: {
-              isProfileListPresent = true
             },
             onEmergencyTapped: {
               showEmergencyView = true
@@ -356,6 +330,15 @@ struct HomeView: View {
     ratingManager.incrementLaunchCount()
   }
 
+  private func refreshSyncedContent() async {
+    if profileSyncManager.isEnabled {
+      await profileSyncManager.performFullSync()
+    }
+    await MainActor.run {
+      loadApp()
+    }
+  }
+
   private func loadApp() {
     strategyManager.loadActiveSession(context: context)
     strategyManager.resyncAllScheduleMonitoringWithDeviceActivity(context: context)
@@ -392,6 +375,7 @@ struct HomeView: View {
     .environmentObject(NavigationManager())
     .environmentObject(StrategyManager())
     .environmentObject(RatingManager())
+    .environmentObject(ProfileSyncManager.shared)
     .environmentObject(ThemeManager.shared)
     .defaultAppStorage(UserDefaults(suiteName: "preview")!)
     .onAppear {
