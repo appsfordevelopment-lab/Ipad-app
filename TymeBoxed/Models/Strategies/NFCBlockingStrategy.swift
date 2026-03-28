@@ -51,7 +51,7 @@ class NFCBlockingStrategy: BlockingStrategy {
           else {
             return
           }
-          self.appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+          self.appBlocker.activateRestrictions(for: BlockedProfiles.activationSnapshot(for: profile))
           let activeSession =
             BlockedProfileSession
             .createSession(

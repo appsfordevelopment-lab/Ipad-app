@@ -5,7 +5,7 @@ import ManagedSettings
 import SwiftData
 
 @Model
-class BlockedProfiles {
+class BlockedProfiles: Identifiable {
   @Attribute(.unique) var id: UUID
   var name: String
   var selectedActivity: FamilyActivitySelection
@@ -293,6 +293,13 @@ class BlockedProfiles {
 
   static func getProfileDeepLink(_ profile: BlockedProfiles) -> String {
     return "https://timeboxed.app/profile/" + profile.id.uuidString
+  }
+
+  /// Writes the profile to the app group before returning, so extensions and BG recovery
+  /// see the same tokens as the main app (critical when the app is not running).
+  static func activationSnapshot(for profile: BlockedProfiles) -> SharedData.ProfileSnapshot {
+    updateSnapshot(for: profile)
+    return getSnapshot(for: profile)
   }
 
   static func getSnapshot(for profile: BlockedProfiles) -> SharedData.ProfileSnapshot {

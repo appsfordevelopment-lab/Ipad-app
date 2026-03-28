@@ -52,23 +52,6 @@ struct SettingsView: View {
   @ViewBuilder
   private var deviceSyncSection: some View {
     Section {
-      Toggle(isOn: $profileSyncManager.isEnabled) {
-        HStack {
-          Image(systemName: "arrow.triangle.2.circlepath.icloud.fill")
-            .foregroundStyle(themeManager.themeColor)
-            .font(.title3)
-
-          VStack(alignment: .leading, spacing: 2) {
-            Text("Enable Profile Sync")
-              .font(.headline)
-            Text("Sync profiles across your devices")
-              .font(.caption)
-              .foregroundColor(.secondary)
-          }
-        }
-      }
-      .tint(themeManager.themeColor)
-
       HStack {
         Image(
           systemName: cloudKitSyncStatus.isSignedIn ? "checkmark.icloud.fill" : "exclamationmark.icloud.fill"
@@ -102,76 +85,66 @@ struct SettingsView: View {
       }
       .padding(.vertical, 2)
 
-      if profileSyncManager.isEnabled {
+      HStack {
+        Text("Sync Status")
+          .foregroundStyle(.primary)
+        Spacer()
+        HStack(spacing: 8) {
+          if profileSyncManager.isSyncing {
+            ProgressView()
+              .scaleEffect(0.8)
+          } else {
+            Circle()
+              .fill(syncStatusColor)
+              .frame(width: 8, height: 8)
+          }
+          Text(profileSyncManager.syncStatus.displayText)
+            .foregroundStyle(.secondary)
+            .font(.subheadline)
+        }
+      }
+
+      if let lastSync = profileSyncManager.lastSyncDate {
         HStack {
-          Text("Sync Status")
+          Text("Last Synced")
             .foregroundStyle(.primary)
           Spacer()
-          HStack(spacing: 8) {
-            if profileSyncManager.isSyncing {
-              ProgressView()
-                .scaleEffect(0.8)
-            } else {
-              Circle()
-                .fill(syncStatusColor)
-                .frame(width: 8, height: 8)
-            }
-            Text(profileSyncManager.syncStatus.displayText)
-              .foregroundStyle(.secondary)
-              .font(.subheadline)
-          }
+          Text(lastSync, style: .relative)
+            .foregroundStyle(.secondary)
+            .font(.subheadline)
         }
-
-        if let lastSync = profileSyncManager.lastSyncDate {
-          HStack {
-            Text("Last Synced")
-              .foregroundStyle(.primary)
-            Spacer()
-            Text(lastSync, style: .relative)
-              .foregroundStyle(.secondary)
-              .font(.subheadline)
-          }
-        }
-
-        Button {
-          Task {
-            await profileSyncManager.performFullSync()
-          }
-        } label: {
-          HStack {
-            Image(systemName: "arrow.clockwise")
-              .foregroundColor(themeManager.themeColor)
-            Text("Sync Now")
-              .foregroundColor(.primary)
-            Spacer()
-            if profileSyncManager.isSyncing {
-              ProgressView()
-                .scaleEffect(0.8)
-            }
-          }
-        }
-        .disabled(profileSyncManager.isSyncing)
       }
+
+      Button {
+        Task {
+          await profileSyncManager.performFullSync()
+        }
+      } label: {
+        HStack {
+          Image(systemName: "arrow.clockwise")
+            .foregroundColor(themeManager.themeColor)
+          Text("Sync Now")
+            .foregroundColor(.primary)
+          Spacer()
+          if profileSyncManager.isSyncing {
+            ProgressView()
+              .scaleEffect(0.8)
+          }
+        }
+      }
+      .disabled(profileSyncManager.isSyncing)
     } header: {
       Text("Device Sync")
     } footer: {
-      if profileSyncManager.isEnabled {
-        Text(
-          "Profiles sync to devices signed in with the same iCloud account. App selections are configured per device."
-        )
-      } else {
-        Text(
-          "Enable to sync profiles across your iPhone and iPad. Requires an iCloud account."
-        )
-      }
+      Text(
+        "Profiles sync to devices signed in with the same iCloud account. App selections are configured per device."
+      )
     }
   }
 
   var body: some View {
     NavigationStack {
       Form {
-        deviceSyncSection
-
         Section("About") {
           HStack {
             Text("Version")
@@ -204,7 +177,7 @@ struct SettingsView: View {
           }
         }
 
-
+        deviceSyncSection
 
         // Section("Help") {
         //   Link(destination: URL(string: "https://www.timeboxed.app/blocking-native-apps.html")!) {

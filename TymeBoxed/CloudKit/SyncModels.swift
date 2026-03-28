@@ -269,6 +269,73 @@ struct SyncedProfile: Codable, Equatable {
   }
 }
 
+// MARK: - Emergency unlock (singleton per iCloud user)
+
+struct SyncedEmergencyState: Equatable {
+  var remainingUnblocks: Int
+  var resetPeriodWeeks: Int
+  var lastResetTimestamp: Double
+  var updatedAt: Date
+  var originDeviceId: String
+
+  static let recordType = "SyncedEmergencyState"
+  static let singletonRecordName = "EmergencyStateSingleton"
+
+  enum FieldKey: String {
+    case remainingUnblocks
+    case resetPeriodWeeks
+    case lastResetTimestamp
+    case updatedAt
+    case originDeviceId
+  }
+
+  func updateCKRecord(_ record: CKRecord) {
+    record[FieldKey.remainingUnblocks.rawValue] = remainingUnblocks
+    record[FieldKey.resetPeriodWeeks.rawValue] = resetPeriodWeeks
+    record[FieldKey.lastResetTimestamp.rawValue] = lastResetTimestamp
+    record[FieldKey.updatedAt.rawValue] = updatedAt
+    record[FieldKey.originDeviceId.rawValue] = originDeviceId
+  }
+
+  func toCKRecord(in zoneID: CKRecordZone.ID, existing: CKRecord?) -> CKRecord {
+    let recordID = CKRecord.ID(recordName: Self.singletonRecordName, zoneID: zoneID)
+    let record =
+      existing
+      ?? CKRecord(recordType: Self.recordType, recordID: recordID)
+    updateCKRecord(record)
+    return record
+  }
+
+  init(
+    remainingUnblocks: Int,
+    resetPeriodWeeks: Int,
+    lastResetTimestamp: Double,
+    updatedAt: Date,
+    originDeviceId: String
+  ) {
+    self.remainingUnblocks = remainingUnblocks
+    self.resetPeriodWeeks = resetPeriodWeeks
+    self.lastResetTimestamp = lastResetTimestamp
+    self.updatedAt = updatedAt
+    self.originDeviceId = originDeviceId
+  }
+
+  init?(from record: CKRecord) {
+    guard record.recordType == Self.recordType,
+      let updatedAt = record[FieldKey.updatedAt.rawValue] as? Date,
+      let originDeviceId = record[FieldKey.originDeviceId.rawValue] as? String
+    else {
+      return nil
+    }
+
+    remainingUnblocks = record[FieldKey.remainingUnblocks.rawValue] as? Int ?? 3
+    resetPeriodWeeks = record[FieldKey.resetPeriodWeeks.rawValue] as? Int ?? 4
+    lastResetTimestamp = record[FieldKey.lastResetTimestamp.rawValue] as? Double ?? 0
+    self.updatedAt = updatedAt
+    self.originDeviceId = originDeviceId
+  }
+}
+
 // MARK: - Legacy session cleanup
 
 enum LegacySyncedSession {

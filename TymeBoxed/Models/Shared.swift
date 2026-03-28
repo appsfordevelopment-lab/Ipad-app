@@ -232,10 +232,11 @@ enum SharedData {
     }
   }
 
+  /// Profile sync is always on; persisted as `true` for app group consumers.
   static var deviceSyncEnabled: Bool {
-    get { suite.bool(forKey: Key.deviceSyncEnabled.rawValue) }
+    get { true }
     set {
-      suite.set(newValue, forKey: Key.deviceSyncEnabled.rawValue)
+      suite.set(true, forKey: Key.deviceSyncEnabled.rawValue)
       synchronize()
     }
   }

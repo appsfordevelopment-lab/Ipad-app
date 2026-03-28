@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Prompt when a synced profile needs local app selection.
 struct AppSelectionPrompt: View {
+  @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var context
   @EnvironmentObject var themeManager: ThemeManager
 
@@ -11,6 +12,7 @@ struct AppSelectionPrompt: View {
 
   @State private var showAppPicker = false
   @State private var localSelection: FamilyActivitySelection
+  @State private var saveErrorMessage: String?
 
   init(profile: BlockedProfiles) {
     self.profile = profile
@@ -77,7 +79,9 @@ struct AppSelectionPrompt: View {
           .background(themeManager.themeColor)
           .foregroundColor(.white)
           .cornerRadius(12)
+          .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
 
         if hasAppsSelected {
           Button {
@@ -92,12 +96,27 @@ struct AppSelectionPrompt: View {
             .background(Color.green)
             .foregroundColor(.white)
             .cornerRadius(12)
+            .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
         }
       }
       .padding(.horizontal)
     }
     .padding(.vertical)
+    .alert(
+      "Couldn’t Save",
+      isPresented: .init(
+        get: { saveErrorMessage != nil },
+        set: { if !$0 { saveErrorMessage = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      if let saveErrorMessage {
+        Text(saveErrorMessage)
+      }
+    }
     .sheet(isPresented: $showAppPicker) {
       AppPicker(
         selection: $localSelection,
@@ -128,16 +147,28 @@ struct AppSelectionPrompt: View {
 
   private func saveSelection() {
     do {
+      guard let liveProfile = try BlockedProfiles.findProfile(byID: profile.id, in: context) else {
+        saveErrorMessage = "This profile is no longer available. Try closing and reopening the app."
+        return
+      }
+
       _ = try BlockedProfiles.updateProfile(
-        profile,
+        liveProfile,
         in: context,
         selection: localSelection,
+        reminderTime: liveProfile.reminderTimeInSeconds,
+        customReminderMessage: liveProfile.customReminderMessage,
+        physicalUnblockNFCTagId: liveProfile.physicalUnblockNFCTagId,
+        physicalUnblockQRCodeId: liveProfile.physicalUnblockQRCodeId,
         needsAppSelection: false
       )
-      SyncCoordinator.shared.pushProfile(profile)
-      Log.info("Saved app selection for profile '\(profile.name)'", category: .ui)
+
+      SyncCoordinator.shared.pushProfile(liveProfile)
+      Log.info("Saved app selection for profile '\(liveProfile.name)'", category: .ui)
+      dismiss()
     } catch {
       Log.error("Failed to save app selection: \(error)", category: .ui)
+      saveErrorMessage = error.localizedDescription
     }
   }
 }

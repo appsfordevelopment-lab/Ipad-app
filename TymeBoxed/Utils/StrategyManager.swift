@@ -84,11 +84,19 @@ class StrategyManager: ObservableObject {
           SharedData.setPauseEndTime(date: Date())
           session.pauseEndTime = Date()
           try? context.save()
-          appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: session.blockedProfile))
+          appBlocker.activateRestrictions(
+            for: BlockedProfiles.activationSnapshot(for: session.blockedProfile))
           DeviceActivityCenterUtil.removePauseTimerActivity(for: session.blockedProfile)
           TimersUtil.cancelPauseEndTask(profileId: session.blockedProfile.id.uuidString)
           NotificationCenter.default.post(name: .strategyManagerPauseEnded, object: nil)
         }
+      }
+
+      // Re-apply shields when returning to the app: Managed Settings can be cleared while
+      // suspended or after process death; extensions still need a fresh app-group snapshot.
+      if let session = activeSession, shouldReapplyBlockingWhileSessionActive(session) {
+        appBlocker.activateRestrictions(
+          for: BlockedProfiles.activationSnapshot(for: session.blockedProfile))
       }
 
       startTimer()
@@ -133,6 +141,22 @@ class StrategyManager: ObservableObject {
     return TimeInterval(pauseData.pauseDurationInMinutes * 60)
   }
 
+  /// True when restrictions should be on for this session (not during an active break or in-progress pause).
+  private func shouldReapplyBlockingWhileSessionActive(_ session: BlockedProfileSession) -> Bool {
+    if session.isBreakActive {
+      return false
+    }
+    if session.isPauseActive {
+      let pauseDuration = getPauseDurationInSeconds(for: session.blockedProfile)
+      if let pauseStart = session.pauseStartTime,
+        Date().timeIntervalSince(pauseStart) < pauseDuration
+      {
+        return false
+      }
+    }
+    return true
+  }
+
   func startTimer() {
     timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
       guard let session = self.activeSession else { return }
@@ -151,7 +175,7 @@ class StrategyManager: ObservableObject {
           SharedData.setPauseEndTime(date: Date())
           session.pauseEndTime = Date()
           self.appBlocker.activateRestrictions(
-            for: BlockedProfiles.getSnapshot(for: session.blockedProfile))
+            for: BlockedProfiles.activationSnapshot(for: session.blockedProfile))
           DeviceActivityCenterUtil.removePauseTimerActivity(for: session.blockedProfile)
           NotificationCenter.default.post(
             name: .strategyManagerPauseEnded,
@@ -411,6 +435,7 @@ class StrategyManager: ObservableObject {
 
     // Decrement the remaining emergency unblocks
     emergencyUnblocksRemaining -= 1
+    postEmergencyStateSync()
 
     // Refresh widgets when emergency unblock ends session
     WidgetCenter.shared.reloadTimelines(ofKind: "ProfileControlWidget")
@@ -419,12 +444,18 @@ class StrategyManager: ObservableObject {
   func resetEmergencyUnblocks() {
     emergencyUnblocksRemaining = 3
     lastEmergencyUnblocksResetDateTimestamp = Date().timeIntervalSinceReferenceDate
+    postEmergencyStateSync()
+  }
+
+  func refreshEmergencyStateFromDefaults() {
+    objectWillChange.send()
   }
 
   func checkAndResetEmergencyUnblocks() {
     // Initialize the last reset date if it hasn't been set
     if lastEmergencyUnblocksResetDateTimestamp == 0 {
       lastEmergencyUnblocksResetDateTimestamp = Date().timeIntervalSinceReferenceDate
+      postEmergencyStateSync()
       return
     }
 
@@ -438,6 +469,7 @@ class StrategyManager: ObservableObject {
     if elapsedTime >= weeksInSeconds {
       emergencyUnblocksRemaining = 3
       lastEmergencyUnblocksResetDateTimestamp = Date().timeIntervalSinceReferenceDate
+      postEmergencyStateSync()
     }
   }
 
@@ -463,6 +495,14 @@ class StrategyManager: ObservableObject {
   func setResetPeriodInWeeks(_ weeks: Int) {
     emergencyUnblocksResetPeriodInWeeks = weeks
     lastEmergencyUnblocksResetDateTimestamp = Date().timeIntervalSinceReferenceDate
+    postEmergencyStateSync()
+  }
+
+  private func postEmergencyStateSync() {
+    EmergencyStateSync.markLocallyModifiedNow()
+    Task {
+      try? await ProfileSyncManager.shared.pushEmergencyState()
+    }
   }
 
   static func getStrategyFromId(id: String) -> BlockingStrategy {
@@ -942,7 +982,7 @@ class StrategyManager: ObservableObject {
         return
       }
 
-      appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+      appBlocker.activateRestrictions(for: BlockedProfiles.activationSnapshot(for: profile))
 
       let activeSession = BlockedProfileSession.createSession(
         in: context,

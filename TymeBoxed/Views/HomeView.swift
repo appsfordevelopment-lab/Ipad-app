@@ -36,8 +36,7 @@ struct HomeView: View {
   // Debug mode
   @State private var showingDebugMode = false
 
-  @State private var showAppSelectionSheet = false
-  @State private var appSelectionProfile: BlockedProfiles?
+  @State private var profileForAppSelection: BlockedProfiles?
 
   @Query(
     filter: #Predicate<BlockedProfileSession> { $0.endTime != nil },
@@ -165,20 +164,18 @@ struct HomeView: View {
     .sheet(isPresented: $showingDebugMode) {
       DebugView()
     }
-    .sheet(isPresented: $showAppSelectionSheet, onDismiss: { appSelectionProfile = nil }) {
-      if let profile = appSelectionProfile {
-        NavigationStack {
-          AppSelectionPrompt(profile: profile)
-            .navigationTitle("App Selection")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-              ToolbarItem(placement: .topBarTrailing) {
-                Button("Done") {
-                  showAppSelectionSheet = false
-                }
+    .sheet(item: $profileForAppSelection) { profile in
+      NavigationStack {
+        AppSelectionPrompt(profile: profile)
+          .navigationTitle("App Selection")
+          .navigationBarTitleDisplayMode(.inline)
+          .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+              Button("Done") {
+                profileForAppSelection = nil
               }
             }
-        }
+          }
       }
     }
     .alert(alertTitle, isPresented: $showingAlert) {
@@ -276,8 +273,7 @@ struct HomeView: View {
               strategyManager.toggleBreak(context: context)
             },
             onAppSelectionTapped: { profile in
-              appSelectionProfile = profile
-              showAppSelectionSheet = true
+              profileForAppSelection = profile
             },
             onEmergencyTapped: {
               showEmergencyView = true

@@ -66,6 +66,13 @@ class SyncCoordinator: ObservableObject {
               category: .sync)
           }
         }
+        do {
+          try await syncManager.pushEmergencyState()
+        } catch {
+          Log.error(
+            "Failed to push emergency state: \(error.localizedDescription)",
+            category: .sync)
+        }
       }
     } catch {
       Log.info("Error pushing local data - \(error)", category: .sync)
@@ -427,6 +434,15 @@ extension SyncCoordinator: SyncEventDelegate {
 
   func didReceiveSessionRecords(_ sessions: [ProfileSessionRecord]) {
     handleProfileSessionRecords(sessions)
+  }
+
+  func didReceiveEmergencyState(_ state: SyncedEmergencyState) {
+    if state.updatedAt <= EmergencyStateSync.localModificationDate {
+      return
+    }
+    EmergencyStateSync.applyFromRemote(state)
+    StrategyManager.shared.refreshEmergencyStateFromDefaults()
+    Log.info("Applied emergency unlock state from iCloud", category: .sync)
   }
 
   func didReceiveSyncReset(clearAppSelections: Bool) {

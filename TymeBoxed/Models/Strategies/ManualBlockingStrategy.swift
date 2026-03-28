@@ -27,7 +27,7 @@ class ManualBlockingStrategy: BlockingStrategy {
     forceStart: Bool?
   ) -> (any View)? {
     self.appBlocker
-      .activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+      .activateRestrictions(for: BlockedProfiles.activationSnapshot(for: profile))
 
     let activeSession =
       BlockedProfileSession

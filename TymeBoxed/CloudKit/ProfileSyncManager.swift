@@ -25,7 +25,7 @@ class ProfileSyncManager: ObservableObject {
 
   // MARK: - Published State
 
-  @Published var isEnabled: Bool = false
+  @Published var isEnabled: Bool = true
   @Published var isSyncing: Bool = false
   @Published var syncStatus: SyncStatus = .disabled
   @Published var connectedDeviceCount: Int = 0
@@ -64,11 +64,11 @@ class ProfileSyncManager: ObservableObject {
   // MARK: - Initialization
 
   private init() {
-    // Load enabled state from SharedData
-    isEnabled = SharedData.deviceSyncEnabled
-    syncStatus = isEnabled ? .idle : .disabled
+    SharedData.deviceSyncEnabled = true
+    isEnabled = true
+    syncStatus = .idle
 
-    // Observe changes to sync enabled setting
+    // Observe changes (UI no longer disables sync; kept for defensive consistency)
     $isEnabled
       .dropFirst()
       .sink { [weak self] enabled in
@@ -376,6 +376,7 @@ class ProfileSyncManager: ObservableObject {
       // Pull remote changes
       try await pullProfiles()
       try await pullProfileSessionRecords()  // CAS-based session sync
+      try await pullEmergencyState()
 
       // Request push of local data (SyncCoordinator will handle this)
       syncEventDelegate?.didRequestLocalDataPush()
@@ -573,6 +574,74 @@ class ProfileSyncManager: ObservableObject {
     }
   }
 
+  // MARK: - Emergency unlock sync
+
+  private func pullEmergencyState() async throws {
+    guard isEnabled else { return }
+
+    let recordID = CKRecord.ID(
+      recordName: SyncedEmergencyState.singletonRecordName,
+      zoneID: syncZoneID
+    )
+
+    do {
+      let record = try await privateDatabase.record(for: recordID)
+      guard let state = SyncedEmergencyState(from: record) else {
+        Log.warning("Failed to decode SyncedEmergencyState from CloudKit", category: .sync)
+        return
+      }
+      syncEventDelegate?.didReceiveEmergencyState(state)
+    } catch let error as CKError where error.code == .unknownItem {
+      return
+    } catch let error as CKError {
+      if error.code == .zoneNotFound {
+        return
+      }
+      throw SyncError.fetchFailed(error)
+    } catch {
+      throw SyncError.fetchFailed(error)
+    }
+  }
+
+  /// Push local emergency-unblock counters (singleton record). Call after user changes or full sync.
+  func pushEmergencyState() async throws {
+    guard isEnabled else { throw SyncError.syncDisabled }
+
+    let recordID = CKRecord.ID(
+      recordName: SyncedEmergencyState.singletonRecordName,
+      zoneID: syncZoneID
+    )
+
+    let existing: CKRecord?
+    do {
+      existing = try await privateDatabase.record(for: recordID)
+    } catch let error as CKError where error.code == .unknownItem {
+      existing = nil
+    } catch {
+      Log.error(
+        "Failed to fetch emergency state record: \(error.localizedDescription)",
+        category: .sync)
+      throw SyncError.fetchFailed(error)
+    }
+
+    if let existing,
+      let remote = SyncedEmergencyState(from: existing),
+      remote.updatedAt > EmergencyStateSync.localModificationDate
+    {
+      EmergencyStateSync.applyFromRemote(remote)
+      StrategyManager.shared.refreshEmergencyStateFromDefaults()
+      Log.info("Merged newer emergency unlock state from CloudKit before push", category: .sync)
+      return
+    }
+
+    var payload = EmergencyStateSync.readForCloudKit(originDeviceId: deviceId)
+    payload.updatedAt = Date()
+    let record = payload.toCKRecord(in: syncZoneID, existing: existing)
+    _ = try await privateDatabase.save(record)
+    EmergencyStateSync.markMergedFromRemote(updatedAt: payload.updatedAt)
+    Log.info("Pushed emergency unlock state to CloudKit", category: .sync)
+  }
+
   /// Delete a profile from CloudKit
   func deleteProfile(_ profileId: UUID) async throws {
     guard isEnabled else { throw SyncError.syncDisabled }
@@ -692,6 +761,7 @@ class ProfileSyncManager: ObservableObject {
       LegacySyncedSession.recordType,
       ProfileSessionRecord.recordType,
       SyncResetRequest.recordType,
+      SyncedEmergencyState.recordType,
     ]
 
     for recordType in recordTypes {

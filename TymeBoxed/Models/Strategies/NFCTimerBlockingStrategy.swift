@@ -42,7 +42,7 @@ class NFCTimerBlockingStrategy: BlockingStrategy {
           try? context.save()
         }
 
-        self.appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+        self.appBlocker.activateRestrictions(for: BlockedProfiles.activationSnapshot(for: profile))
 
         let activeSession = BlockedProfileSession.createSession(
           in: context,

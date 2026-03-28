@@ -30,7 +30,7 @@ class ShortcutTimerBlockingStrategy: BlockingStrategy {
       return nil
     }
 
-    self.appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+    self.appBlocker.activateRestrictions(for: BlockedProfiles.activationSnapshot(for: profile))
 
     let activeSession = BlockedProfileSession.createSession(
       in: context,

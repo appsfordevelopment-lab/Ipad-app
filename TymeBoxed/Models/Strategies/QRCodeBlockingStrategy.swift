@@ -33,7 +33,7 @@ class QRCodeBlockingStrategy: BlockingStrategy {
     ) { result in
       switch result {
       case .success(let result):
-        self.appBlocker.activateRestrictions(for: BlockedProfiles.getSnapshot(for: profile))
+        self.appBlocker.activateRestrictions(for: BlockedProfiles.activationSnapshot(for: profile))
 
         let tag = result.string
         let activeSession =
