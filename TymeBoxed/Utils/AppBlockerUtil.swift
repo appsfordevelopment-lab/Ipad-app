@@ -9,6 +9,15 @@ class AppBlockerUtil {
   func activateRestrictions(for profile: SharedData.ProfileSnapshot) {
     print("Starting restrictions...")
 
+    // Clear prior shield rules first. Stale combined allow/block state (or tokens from a
+    // previous mode) often prevents shields from applying — especially after sync or when
+    // the Device Activity extension runs without the main app.
+    store.shield.applications = nil
+    store.shield.applicationCategories = nil
+    store.shield.webDomains = nil
+    store.shield.webDomainCategories = nil
+    store.webContent.blockedByFilter = nil
+
     let selection = profile.selectedActivity
     let allowOnlyApps = profile.enableAllowMode
     let allowOnlyDomains = profile.enableAllowModeDomains

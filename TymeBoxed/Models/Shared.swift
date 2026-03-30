@@ -75,6 +75,7 @@ enum SharedData {
       } else {
         suite.removeObject(forKey: Key.profileSnapshots.rawValue)
       }
+      suite.synchronize()
     }
   }
 
@@ -121,6 +122,7 @@ enum SharedData {
       } else {
         suite.removeObject(forKey: Key.activeScheduleSession.rawValue)
       }
+      suite.synchronize()
     }
   }
 

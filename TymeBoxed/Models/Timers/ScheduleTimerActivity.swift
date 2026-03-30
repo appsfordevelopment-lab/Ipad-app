@@ -42,11 +42,6 @@ class ScheduleTimerActivity: TimerActivity {
       return
     }
 
-    if !schedule.olderThan15Minutes() {
-      log.info("Start schedule timer activity for \(profileId), schedule is too new")
-      return
-    }
-
     log.info("Start schedule timer activity for \(profileId), profile: \(profileId)")
 
     if let existingSession = SharedData.getActiveSharedSession() {
