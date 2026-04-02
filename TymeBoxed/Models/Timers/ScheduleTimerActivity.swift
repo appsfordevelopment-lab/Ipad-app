@@ -47,8 +47,11 @@ class ScheduleTimerActivity: TimerActivity {
     if let existingSession = SharedData.getActiveSharedSession() {
       if existingSession.blockedProfileId == profile.id {
         log.info(
-          "Start schedule timer activity for \(profileId), existing session profile matches device activity profile, continuing active session"
+          "Start schedule timer activity for \(profileId), existing session profile matches device activity profile, re-applying restrictions"
         )
+        // ManagedSettings can be cleared while the main app is suspended or terminated; always
+        // re-apply when the schedule interval starts.
+        appBlocker.activateRestrictions(for: profile)
         return
       } else {
         log.info(

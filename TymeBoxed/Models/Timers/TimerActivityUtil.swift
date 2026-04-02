@@ -1,12 +1,23 @@
 import DeviceActivity
+import OSLog
+
+private let log = Logger(subsystem: "com.timeboxed.monitor", category: "TimerActivityUtil")
 
 class TimerActivityUtil {
   static func startTimerActivity(for activity: DeviceActivityName) {
     let parts = getTimerParts(from: activity)
 
-    guard let timerActivity = getTimerActivity(for: parts.deviceActivityId),
-      let profile = getProfile(for: parts.profileId)
-    else {
+    guard let timerActivity = getTimerActivity(for: parts.deviceActivityId) else {
+      log.error(
+        "startTimerActivity: unknown deviceActivityId=\(parts.deviceActivityId, privacy: .public) rawValue=\(activity.rawValue, privacy: .public)"
+      )
+      return
+    }
+
+    guard let profile = getProfile(for: parts.profileId) else {
+      log.error(
+        "startTimerActivity: missing app group profile snapshot for profileId=\(parts.profileId, privacy: .public) rawValue=\(activity.rawValue, privacy: .public)"
+      )
       return
     }
 
@@ -16,13 +27,26 @@ class TimerActivityUtil {
   static func stopTimerActivity(for activity: DeviceActivityName) {
     let parts = getTimerParts(from: activity)
 
-    guard let timerActivity = getTimerActivity(for: parts.deviceActivityId),
-      let profile = getProfile(for: parts.profileId)
-    else {
+    guard let timerActivity = getTimerActivity(for: parts.deviceActivityId) else {
+      log.error(
+        "stopTimerActivity: unknown deviceActivityId=\(parts.deviceActivityId, privacy: .public) rawValue=\(activity.rawValue, privacy: .public)"
+      )
+      return
+    }
+
+    guard let profile = getProfile(for: parts.profileId) else {
+      log.error(
+        "stopTimerActivity: missing app group profile snapshot for profileId=\(parts.profileId, privacy: .public) rawValue=\(activity.rawValue, privacy: .public)"
+      )
       return
     }
 
     timerActivity.stop(for: profile)
+  }
+
+  /// True when `warningTime` was set on `DeviceActivitySchedule` (short pause workaround).
+  static func usesIntervalWillEndWarning(for activity: DeviceActivityName) -> Bool {
+    activity.rawValue.hasPrefix("\(PauseTimerActivity.id):")
   }
 
   private static func getTimerParts(from activity: DeviceActivityName) -> (

@@ -6,7 +6,6 @@
 //
 
 import DeviceActivity
-import ManagedSettings
 import OSLog
 
 private let log = Logger(
@@ -17,8 +16,6 @@ private let log = Logger(
 // Optionally override any of the functions below.
 // Make sure that your class name matches the NSExtensionPrincipalClass in your Info.plist.
 class DeviceActivityMonitorExtension: DeviceActivityMonitor {
-  private let appBlocker = AppBlockerUtil()
-
   override init() {
     super.init()
   }
@@ -41,6 +38,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     super.intervalWillEndWarning(for: activity)
 
     log.info("intervalWillEndWarning for activity: \(activity.rawValue)")
+    // Only pause activities pass `warningTime` (see DeviceActivityCenterUtil). Calling
+    // stopTimerActivity here for schedule/break/strategy would end shields before
+    // intervalDidEnd.
+    guard TimerActivityUtil.usesIntervalWillEndWarning(for: activity) else {
+      return
+    }
     TimerActivityUtil.stopTimerActivity(for: activity)
   }
 }
