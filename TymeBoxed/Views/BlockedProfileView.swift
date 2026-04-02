@@ -536,7 +536,7 @@ struct BlockedProfileView: View {
           return Alert(
             title: Text("Delete Profile"),
             message: Text(
-              "Are you sure you want to delete this profile? This action cannot be undone."),
+              "Remove this profile from this device only. If iCloud sync is on, it stays on your other devices. This cannot be undone on this device."),
             primaryButton: .cancel(),
             secondaryButton: .destructive(Text("Delete")) {
               dismiss()

@@ -13,6 +13,8 @@ enum SharedData {
     case completedScheduleSessions
     case deviceSyncId
     case deviceSyncEnabled
+    /// Profile IDs the user deleted on this device only — keep iCloud copy for other devices.
+    case locallyRemovedProfileIdsForSync
   }
 
   // MARK: – Serializable snapshot of a profile (no sessions)
@@ -210,7 +212,41 @@ enum SharedData {
     profileSnapshots = [:]
     activeSharedSession = nil
     completedSessionsInSchedular = []
+    clearLocallyRemovedProfileIdsForSync()
     synchronize()
+  }
+
+  // MARK: - Per-device profile sync removals
+
+  /// IDs of profiles removed on this device only (not deleted from iCloud).
+  static var locallyRemovedProfileIdsForSync: Set<UUID> {
+    get {
+      guard let data = suite.data(forKey: Key.locallyRemovedProfileIdsForSync.rawValue) else {
+        return []
+      }
+      let ids = (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
+      return Set(ids)
+    }
+    set {
+      let data = try? JSONEncoder().encode(Array(newValue))
+      if let data {
+        suite.set(data, forKey: Key.locallyRemovedProfileIdsForSync.rawValue)
+      } else {
+        suite.removeObject(forKey: Key.locallyRemovedProfileIdsForSync.rawValue)
+      }
+      suite.synchronize()
+    }
+  }
+
+  static func registerProfileRemovedLocallyFromSync(_ id: UUID) {
+    var ids = locallyRemovedProfileIdsForSync
+    ids.insert(id)
+    locallyRemovedProfileIdsForSync = ids
+  }
+
+  static func clearLocallyRemovedProfileIdsForSync() {
+    suite.removeObject(forKey: Key.locallyRemovedProfileIdsForSync.rawValue)
+    suite.synchronize()
   }
 
   // MARK: - Device sync (same keys across processes via App Group)

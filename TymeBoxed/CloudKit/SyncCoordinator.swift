@@ -92,9 +92,14 @@ class SyncCoordinator: ObservableObject {
     }
 
     let deviceId = SharedData.deviceSyncId.uuidString
+    let locallyRemovedIds = SharedData.locallyRemovedProfileIdsForSync
 
     for syncedProfile in syncedProfiles {
       if syncedProfile.originDeviceId == deviceId {
+        continue
+      }
+
+      if locallyRemovedIds.contains(syncedProfile.profileId) {
         continue
       }
 
@@ -385,6 +390,8 @@ class SyncCoordinator: ObservableObject {
       return
     }
 
+    SharedData.clearLocallyRemovedProfileIdsForSync()
+
     if clearAppSelections {
       do {
         let profiles = try BlockedProfiles.fetchProfiles(in: context)
@@ -463,20 +470,13 @@ class SyncCoordinator: ObservableObject {
     }
   }
 
+  /// Records a profile as removed on this device only. The iCloud record stays so other devices keep the profile.
   func deleteProfileFromSync(_ profileId: UUID) {
     guard syncManager.isEnabled else { return }
 
-    let previousTask = pushTask
-    pushTask = Task {
-      await previousTask?.value
-      do {
-        try await syncManager.deleteProfile(profileId)
-      } catch {
-        Log.error(
-          "Failed to delete profile \(profileId) from CloudKit: \(error.localizedDescription)",
-          category: .sync)
-      }
-    }
+    SharedData.registerProfileRemovedLocallyFromSync(profileId)
+    Log.info(
+      "Profile \(profileId) removed locally; left in iCloud for other devices", category: .sync)
   }
 }
 
