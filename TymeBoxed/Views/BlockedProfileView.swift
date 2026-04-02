@@ -579,13 +579,21 @@ struct BlockedProfileView: View {
         enableReminder ? reminderTimeInMinutes * 60 : nil
 
       if let existingProfile = profile {
+        let strategyId = selectedStrategy?.getIdentifier()
+        if let sid = strategyId,
+          sid != ManualBlockingStrategy.id,
+          IPadNFCPauseAdaptation.canonical(for: existingProfile.id) != nil
+        {
+          IPadNFCPauseAdaptation.clear(for: existingProfile.id)
+        }
+
         // Update existing profile
         let updatedProfile = try BlockedProfiles.updateProfile(
           existingProfile,
           in: modelContext,
           name: name,
           selection: selectedActivity,
-          blockingStrategyId: selectedStrategy?.getIdentifier(),
+          blockingStrategyId: strategyId,
           enableLiveActivity: enableLiveActivity,
           reminderTime: reminderTimeSeconds,
           customReminderMessage: customReminderMessage,

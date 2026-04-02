@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UIKit
 
 /// Coordinates ProfileSyncManager events with local SwiftData storage.
 @MainActor
@@ -50,7 +51,7 @@ class SyncCoordinator: ObservableObject {
 
       let deviceId = SharedData.deviceSyncId.uuidString
       let syncedProfiles = profiles.filter { !$0.isNewerSchemaVersion }
-        .map { SyncedProfile(from: $0, originDeviceId: deviceId) }
+        .map { SyncedProfile.forCloudPush(from: $0, originDeviceId: deviceId) }
 
       Log.info("Pushing \(syncedProfiles.count) profiles to CloudKit", category: .sync)
 
@@ -159,12 +160,64 @@ class SyncCoordinator: ObservableObject {
       }
     }
 
+    applyIPadNFCPauseFocusAdaptationsIfNeeded(in: context)
+
     do {
       try context.save()
     } catch {
       Log.error(
         "Failed to save synced profiles: \(error.localizedDescription)", category: .sync)
     }
+  }
+
+  /// iPads without NFC cannot run "Focus session with Break" (`NFCPauseTimerBlockingStrategy`).
+  /// Run it as Manual + breaks (pause length → break length) locally while preserving CloudKit data.
+  func applyIPadNFCPauseFocusAdaptationsIfNeeded(in context: ModelContext) {
+    guard IPadNFCPauseAdaptation.shouldAdaptNFCPauseForCurrentDevice else { return }
+
+    do {
+      let profiles = try BlockedProfiles.fetchProfiles(in: context)
+      for profile in profiles {
+        adaptNFCPauseProfileForIPadWithoutNFC(profile, in: context)
+      }
+    } catch {
+      Log.info("iPad NFCPause adaptation: \(error)", category: .sync)
+    }
+  }
+
+  private func adaptNFCPauseProfileForIPadWithoutNFC(
+    _ profile: BlockedProfiles,
+    in context: ModelContext
+  ) {
+    if profile.blockingStrategyId != NFCPauseTimerBlockingStrategy.id {
+      if IPadNFCPauseAdaptation.canonical(for: profile.id) != nil,
+        profile.blockingStrategyId != ManualBlockingStrategy.id
+      {
+        IPadNFCPauseAdaptation.clear(for: profile.id)
+      }
+      return
+    }
+
+    let pauseData = StrategyPauseTimerData.toStrategyPauseTimerData(
+      from: profile.strategyData ?? Data())
+    let canonical = IPadNFCPauseAdaptation.Canonical(
+      blockingStrategyId: NFCPauseTimerBlockingStrategy.id,
+      strategyData: profile.strategyData,
+      enableBreaks: profile.enableBreaks,
+      breakTimeInMinutes: profile.breakTimeInMinutes
+    )
+    IPadNFCPauseAdaptation.store(canonical: canonical, for: profile.id)
+
+    profile.blockingStrategyId = ManualBlockingStrategy.id
+    profile.enableBreaks = true
+    profile.breakTimeInMinutes = max(1, pauseData.pauseDurationInMinutes)
+    profile.strategyData = nil
+    profile.updatedAt = Date()
+    BlockedProfiles.updateSnapshot(for: profile)
+
+    Log.info(
+      "Adapted '\(profile.name)' for iPad: NFCPauseTimer → Manual with \(profile.breakTimeInMinutes) min breaks",
+      category: .sync)
   }
 
   private func updateLocalProfile(

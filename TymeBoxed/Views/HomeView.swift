@@ -87,6 +87,8 @@ struct HomeView: View {
     }
     .safeAreaInset(edge: .bottom, spacing: 0) {
       MainTabBar(selection: $selectedMainTab)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 10)
     }
     .padding(.top, 1)
     .frame(
@@ -338,6 +340,7 @@ struct HomeView: View {
   private func loadApp() {
     strategyManager.loadActiveSession(context: context)
     strategyManager.resyncAllScheduleMonitoringWithDeviceActivity(context: context)
+    SyncCoordinator.shared.applyIPadNFCPauseFocusAdaptationsIfNeeded(in: context)
   }
 
   private func onAppearApp() {

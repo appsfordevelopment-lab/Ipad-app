@@ -258,6 +258,23 @@ struct SyncedProfile: Codable, Equatable {
     scheduleLastStoppedAt = profile.scheduleLastStoppedAt
   }
 
+  /// Builds the payload to upload to CloudKit. When an iPad has locally adapted an
+  /// `NFCPauseTimerBlockingStrategy` profile to Manual + breaks, this restores the original
+  /// strategy fields so the iPhone copy is not overwritten.
+  static func forCloudPush(
+    from profile: BlockedProfiles,
+    originDeviceId: String
+  ) -> SyncedProfile {
+    var synced = SyncedProfile(from: profile, originDeviceId: originDeviceId)
+    if let canonical = IPadNFCPauseAdaptation.canonical(for: profile.id) {
+      synced.blockingStrategyId = canonical.blockingStrategyId
+      synced.strategyData = canonical.strategyData
+      synced.enableBreaks = canonical.enableBreaks
+      synced.breakTimeInMinutes = canonical.breakTimeInMinutes
+    }
+    return synced
+  }
+
   var schedule: BlockedProfileSchedule? {
     guard let data = scheduleData else { return nil }
     return try? JSONDecoder().decode(BlockedProfileSchedule.self, from: data)

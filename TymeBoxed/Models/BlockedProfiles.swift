@@ -283,6 +283,8 @@ class BlockedProfiles: Identifiable {
     // Delete the snapshot
     deleteSnapshot(for: profile)
 
+    IPadNFCPauseAdaptation.clear(for: profile.id)
+
     // Remove the schedule restrictions
     DeviceActivityCenterUtil.removeScheduleTimerActivities(for: profile)
 

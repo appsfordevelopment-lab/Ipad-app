@@ -134,14 +134,17 @@ struct BlockedProfileListView: View {
 
     // Delete the profiles and reorder
     do {
-      for index in offsets {
-        let profile = profiles[index]
+      let profilesToDelete = offsets.map { profiles[$0] }
+      for profile in profilesToDelete {
+        let profileId = profile.id
         try BlockedProfiles.deleteProfile(profile, in: context)
+        SyncCoordinator.shared.deleteProfileFromSync(profileId)
       }
 
       // Reorder remaining profiles to fix gaps in ordering
       let remainingProfiles = try BlockedProfiles.fetchProfiles(in: context)
       try BlockedProfiles.reorderProfiles(remainingProfiles, in: context)
+      try context.save()
     } catch {
       print("Failed to delete or reorder profiles: \(error)")
     }

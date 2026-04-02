@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 enum MainTab: String, CaseIterable, Identifiable {
   case profile
@@ -25,15 +24,32 @@ enum MainTab: String, CaseIterable, Identifiable {
   }
 
   var accessibilityLabel: String { title }
+
+  /// Matches the reference layout: only the first tab shows a small caps label under the icon.
+  var showsTabBarSubtitle: Bool {
+    switch self {
+    case .profile: return true
+    case .activity, .settings: return false
+    }
+  }
 }
 
 struct MainTabBar: View {
+  @Environment(\.colorScheme) private var colorScheme
   @EnvironmentObject var themeManager: ThemeManager
   @Binding var selection: MainTab
 
   private let iconPointSize: CGFloat = 22
+  private let barCornerRadius: CGFloat = 32
 
-  static let formBottomScrollInset: CGFloat = 72
+  /// Scroll clearance for `Form` / lists behind the floating bar (profile tab uses safe area only).
+  static let formBottomScrollInset: CGFloat = 92
+
+  private var floatingBarFill: Color {
+    colorScheme == .dark
+      ? Color(white: 0.19)
+      : Color(red: 0.96, green: 0.96, blue: 0.95)
+  }
 
   var body: some View {
     HStack(spacing: 0) {
@@ -42,19 +58,20 @@ struct MainTabBar: View {
           .frame(maxWidth: .infinity)
       }
     }
-    .padding(.horizontal, 8)
-    .padding(.top, 10)
-    .padding(.bottom, 6)
+    .padding(.horizontal, 10)
+    .padding(.top, 12)
+    .padding(.bottom, 12)
     .background {
-      Rectangle()
-        .fill(Color(uiColor: .systemGray5))
-        .ignoresSafeArea(edges: .bottom)
+      RoundedRectangle(cornerRadius: barCornerRadius, style: .continuous)
+        .fill(floatingBarFill)
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.35 : 0.12), radius: 16, y: 6)
     }
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(Color(uiColor: .separator))
-        .frame(height: 1)
-    }
+  }
+
+  private var idleTabTint: Color {
+    colorScheme == .dark
+      ? Color(white: 0.55)
+      : Color(red: 0.42, green: 0.40, blue: 0.38)
   }
 
   private func tabButton(_ tab: MainTab) -> some View {
@@ -62,16 +79,23 @@ struct MainTabBar: View {
     return Button {
       selection = tab
     } label: {
-      Image(systemName: tab.systemImage)
-        .font(.system(size: iconPointSize, weight: .regular))
-        .foregroundStyle(
-          isSelected
-            ? themeManager.themeColor
-            : Color.secondary
-        )
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
+      Group {
+        if tab.showsTabBarSubtitle {
+          VStack(spacing: 5) {
+            Image(systemName: tab.systemImage)
+              .font(.system(size: iconPointSize, weight: .regular))
+            Text(tab.title.uppercased())
+              .font(.system(size: 9, weight: .semibold))
+              .tracking(0.6)
+          }
+        } else {
+          Image(systemName: tab.systemImage)
+            .font(.system(size: iconPointSize, weight: .regular))
+        }
+      }
+      .foregroundStyle(isSelected ? themeManager.themeColor : idleTabTint)
+      .frame(maxWidth: .infinity)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel(Text(tab.accessibilityLabel))

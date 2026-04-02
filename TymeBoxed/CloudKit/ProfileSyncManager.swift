@@ -454,7 +454,7 @@ class ProfileSyncManager: ObservableObject {
   func pushProfile(_ profile: BlockedProfiles) async throws {
     guard isEnabled else { throw SyncError.syncDisabled }
 
-    let syncedProfile = SyncedProfile(from: profile, originDeviceId: deviceId)
+    let syncedProfile = SyncedProfile.forCloudPush(from: profile, originDeviceId: deviceId)
     try await pushSyncedProfile(syncedProfile)
   }
 
@@ -651,6 +651,9 @@ class ProfileSyncManager: ObservableObject {
     do {
       try await privateDatabase.deleteRecord(withID: recordID)
       Log.info("Deleted profile \(profileId) from CloudKit", category: .sync)
+    } catch let error as CKError where error.code == .unknownItem {
+      Log.info(
+        "Profile \(profileId) not in CloudKit (already deleted or never synced)", category: .sync)
     } catch {
       Log.info("Failed to delete profile - \(error)", category: .sync)
       throw SyncError.deleteFailed(error)
