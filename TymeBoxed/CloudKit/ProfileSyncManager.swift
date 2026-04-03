@@ -566,7 +566,12 @@ class ProfileSyncManager: ObservableObject {
         remoteProfileIds: allRemoteProfileIds
       )
     } catch let error as CKError {
-      if error.code == .zoneNotFound || error.code == .unknownItem {
+      if error.code == .zoneNotFound {
+        Log.info("Sync zone missing — treating remote profile set as empty", category: .sync)
+        syncEventDelegate?.didReceiveSyncedProfiles([], remoteProfileIds: [])
+        return
+      }
+      if error.code == .unknownItem {
         Log.info("No profiles found in CloudKit", category: .sync)
         return
       }

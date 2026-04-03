@@ -39,25 +39,30 @@ class SyncCoordinator: ObservableObject {
       return
     }
 
-    guard let context = modelContext else {
+    guard modelContext != nil else {
       Log.info("No model context available for local push", category: .sync)
       return
     }
 
-    do {
-      let profiles = try BlockedProfiles.fetchProfiles(in: context)
+    let previousTask = pushTask
+    pushTask = Task { @MainActor in
+      await previousTask?.value
+      guard syncManager.isEnabled, let context = modelContext else {
+        return
+      }
+      do {
+        // Fetch after prior tasks finish so we never push profiles removed by a concurrent
+        // pull (e.g. phone deleted from iCloud while an older push queue was still in flight).
+        let profiles = try BlockedProfiles.fetchProfiles(in: context)
 
-      Log.info("Found \(profiles.count) profiles to sync", category: .sync)
+        Log.info("Found \(profiles.count) profiles to sync", category: .sync)
 
-      let deviceId = SharedData.deviceSyncId.uuidString
-      let syncedProfiles = profiles.filter { !$0.isNewerSchemaVersion }
-        .map { SyncedProfile.forCloudPush(from: $0, originDeviceId: deviceId) }
+        let deviceId = SharedData.deviceSyncId.uuidString
+        let syncedProfiles = profiles.filter { !$0.isNewerSchemaVersion }
+          .map { SyncedProfile.forCloudPush(from: $0, originDeviceId: deviceId) }
 
-      Log.info("Pushing \(syncedProfiles.count) profiles to CloudKit", category: .sync)
+        Log.info("Pushing \(syncedProfiles.count) profiles to CloudKit", category: .sync)
 
-      let previousTask = pushTask
-      pushTask = Task {
-        await previousTask?.value
         for syncedProfile in syncedProfiles {
           do {
             try await syncManager.pushSyncedProfile(syncedProfile)
@@ -74,9 +79,9 @@ class SyncCoordinator: ObservableObject {
             "Failed to push emergency state: \(error.localizedDescription)",
             category: .sync)
         }
+      } catch {
+        Log.info("Error pushing local data - \(error)", category: .sync)
       }
-    } catch {
-      Log.info("Error pushing local data - \(error)", category: .sync)
     }
   }
 
@@ -95,8 +100,14 @@ class SyncCoordinator: ObservableObject {
     let locallyRemovedIds = SharedData.locallyRemovedProfileIdsForSync
 
     for syncedProfile in syncedProfiles {
+      // Match iPhone: skip our own pushes only when we still have the row locally, so restores /
+      // same deviceSyncId edge cases still apply incoming records.
       if syncedProfile.originDeviceId == deviceId {
-        continue
+        let existsLocally =
+          (try? BlockedProfiles.findProfile(byID: syncedProfile.profileId, in: context)) != nil
+        if existsLocally {
+          continue
+        }
       }
 
       if locallyRemovedIds.contains(syncedProfile.profileId) {
@@ -131,7 +142,7 @@ class SyncCoordinator: ObservableObject {
               profileName: existingProfile.name
             )
             existingProfile.profileSchemaVersion = syncedProfile.profileSchemaVersion
-            existingProfile.syncVersion = syncedProfile.version
+            existingProfile.syncVersion = max(1, syncedProfile.version)
           } else if syncedProfile.version > existingProfile.syncVersion {
             updateLocalProfile(existingProfile, from: syncedProfile, in: context)
             SyncConflictManager.shared.clearConflict(profileId: existingProfile.id)
@@ -142,6 +153,15 @@ class SyncCoordinator: ObservableObject {
       } catch {
         Log.info("Error handling synced profile - \(error)", category: .sync)
       }
+    }
+
+    // Heal legacy/local rows that still mirror a remote profile but never got a positive syncVersion,
+    // so deletion reconciliation (`syncVersion > 0`) can remove them after phone deletes from iCloud.
+    for synced in syncedProfiles {
+      guard let local = try? BlockedProfiles.findProfile(byID: synced.profileId, in: context),
+        local.syncVersion == 0
+      else { continue }
+      local.syncVersion = max(1, synced.version)
     }
 
     if remoteProfileIds.isEmpty && !syncedProfiles.isEmpty {
@@ -248,7 +268,7 @@ class SyncCoordinator: ObservableObject {
     profile.domains = synced.domains
     profile.schedule = synced.schedule
     profile.disableBackgroundStops = synced.disableBackgroundStops
-    profile.syncVersion = synced.version
+    profile.syncVersion = max(1, synced.version)
     profile.updatedAt = synced.updatedAt
     profile.profileSchemaVersion = max(profile.profileSchemaVersion, synced.profileSchemaVersion)
     profile.scheduleLastStoppedAt = synced.scheduleLastStoppedAt
@@ -281,7 +301,7 @@ class SyncCoordinator: ObservableObject {
       physicalUnblockQRCodeId: synced.physicalUnblockQRCodeId,
       schedule: synced.schedule,
       disableBackgroundStops: synced.disableBackgroundStops,
-      syncVersion: synced.version,
+      syncVersion: max(1, synced.version),
       needsAppSelection: true,
       profileSchemaVersion: synced.profileSchemaVersion,
       scheduleLastStoppedAt: synced.scheduleLastStoppedAt
