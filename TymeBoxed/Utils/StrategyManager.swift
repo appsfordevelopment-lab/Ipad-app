@@ -157,6 +157,16 @@ class StrategyManager: ObservableObject {
     return true
   }
 
+  /// Re-apply Managed Settings as soon as the UI scene leaves `.active` (inactive/background).
+  /// Helps when the system drops restrictions during the home-button transition even though the
+  /// app process is still running.
+  func reapplyShieldsWhenLeavingActive(context: ModelContext) {
+    guard let session = getActiveSession(context: context), session.isActive else { return }
+    guard shouldReapplyBlockingWhileSessionActive(session) else { return }
+    appBlocker.activateRestrictions(
+      for: BlockedProfiles.activationSnapshot(for: session.blockedProfile))
+  }
+
   func startTimer() {
     timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
       guard let session = self.activeSession else { return }

@@ -39,8 +39,10 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
   private func createCustomShieldConfiguration(for type: BlockedContentType, title: String)
     -> ShieldConfiguration
   {
-    // Get user's selected theme color
-    let brandColor = UIColor(ThemeManager.shared.themeColor)
+    // Static brand color — matches `ThemeManager` “Warm Sandstone” (#c4a77d). Avoids SwiftUI /
+    // `@AppStorage` in the extension process (ShieldConfiguration runs out-of-process; missing
+    // Family Controls or brittle `UIColor(Color)` bridging can break shields entirely).
+    let brandColor = UIColor(red: 196 / 255, green: 167 / 255, blue: 125 / 255, alpha: 1)
 
     // Get random fun message
     let randomMessage = getFunBlockMessage(for: type, title: title)

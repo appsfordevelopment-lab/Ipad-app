@@ -75,6 +75,8 @@ class TimerActivityUtil {
       return StrategyTimerActivity()
     case PauseTimerActivity.id:
       return PauseTimerActivity()
+    case ActiveSessionShieldTiming.activityId:
+      return ActiveSessionShieldTimerActivity()
     default:
       return nil
     }

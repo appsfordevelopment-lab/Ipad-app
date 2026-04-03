@@ -54,6 +54,7 @@ class StrategyTimerActivity: TimerActivity {
 
     // End restrictions
     appBlocker.deactivateRestrictions()
+    ActiveSessionShieldTimerActivity.removeMonitor(forProfileId: profileId)
 
     // End the active strategy session
     SharedData.endActiveSharedSession()

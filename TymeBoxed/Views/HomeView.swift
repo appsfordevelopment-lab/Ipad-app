@@ -125,8 +125,13 @@ struct HomeView: View {
     .onChange(of: scenePhase) { oldPhase, newPhase in
       if newPhase == .active {
         loadApp()
-      } else if newPhase == .background {
-        unloadApp()
+      } else {
+        if oldPhase == .active {
+          strategyManager.reapplyShieldsWhenLeavingActive(context: context)
+        }
+        if newPhase == .background {
+          unloadApp()
+        }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .strategyManagerPauseEnded)) { _ in

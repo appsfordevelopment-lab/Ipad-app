@@ -317,6 +317,7 @@ struct SettingsView: View {
       }
       try? context.save()
 
+      ActiveSessionShieldTimerActivity.removeAllMonitors()
       SharedData.clearAllForAccountDeletion()
 
       await AuthenticationManager.shared.deleteAccount()

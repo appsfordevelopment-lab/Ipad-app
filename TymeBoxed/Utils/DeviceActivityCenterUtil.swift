@@ -32,6 +32,7 @@ class DeviceActivityCenterUtil {
       // monitoring while SwiftData still has an active schedule (shows "schedule destroyed").
       try center.startMonitoring(deviceActivityName, during: deviceActivitySchedule)
       print("Scheduled restrictions from \(intervalStart) to \(intervalEnd) daily")
+      invokeScheduleTimerStartFromHost(for: profile)
     } catch {
       print("Failed to start monitoring: \(error.localizedDescription)")
     }
@@ -42,8 +43,8 @@ class DeviceActivityCenterUtil {
     let breakTimerActivity = BreakTimerActivity()
     let deviceActivityName = breakTimerActivity.getDeviceActivityName(from: profile.id.uuidString)
 
-    let (intervalStart, intervalEnd) = getTimeIntervalStartAndEnd(
-      from: profile.breakTimeInMinutes)
+    let (intervalStart, intervalEnd) = absoluteIntervalFromNow(
+      minutes: profile.breakTimeInMinutes)
     let deviceActivitySchedule = DeviceActivitySchedule(
       intervalStart: intervalStart,
       intervalEnd: intervalEnd,
@@ -54,7 +55,8 @@ class DeviceActivityCenterUtil {
       // Remove any existing schedule and create a new one
       stopActivities(for: [deviceActivityName], with: center)
       try center.startMonitoring(deviceActivityName, during: deviceActivitySchedule)
-      print("Scheduled break timer activity from \(intervalStart) to \(intervalEnd) daily")
+      print("Scheduled break timer activity from \(intervalStart) to \(intervalEnd)")
+      invokeBreakTimerStartFromHost(forProfileId: profile.id.uuidString)
     } catch {
       print("Failed to start break timer activity: \(error.localizedDescription)")
     }
@@ -72,8 +74,8 @@ class DeviceActivityCenterUtil {
     let deviceActivityName = strategyTimerActivity.getDeviceActivityName(
       from: profile.id.uuidString)
 
-    let (intervalStart, intervalEnd) = getTimeIntervalStartAndEnd(
-      from: timerData.durationInMinutes)
+    let (intervalStart, intervalEnd) = absoluteIntervalFromNow(
+      minutes: timerData.durationInMinutes)
 
     let deviceActivitySchedule = DeviceActivitySchedule(
       intervalStart: intervalStart,
@@ -85,7 +87,8 @@ class DeviceActivityCenterUtil {
       // Remove any existing activity and create a new one
       stopActivities(for: [deviceActivityName], with: center)
       try center.startMonitoring(deviceActivityName, during: deviceActivitySchedule)
-      print("Scheduled strategy timer activity from \(intervalStart) to \(intervalEnd) daily")
+      print("Scheduled strategy timer activity from \(intervalStart) to \(intervalEnd)")
+      invokeStrategyTimerStartFromHost(forProfileId: profile.id.uuidString)
     } catch {
       print("Failed to start strategy timer activity: \(error.localizedDescription)")
     }
@@ -152,6 +155,7 @@ class DeviceActivityCenterUtil {
       stopActivities(for: [deviceActivityName])
       try center.startMonitoring(deviceActivityName, during: deviceActivitySchedule)
       print("Scheduled pause timer activity for \(minutes) min (DeviceActivity)")
+      invokePauseTimerStartFromHost(forProfileId: profile.id.uuidString)
     } catch {
       print("Failed to start pause timer activity: \(error.localizedDescription)")
     }
@@ -191,6 +195,49 @@ class DeviceActivityCenterUtil {
     return center.activities
   }
 
+  /// Starts (or replaces) Device Activity that re-applies shields while a session is active.
+  static func startActiveSessionShieldMonitor(for profile: BlockedProfiles) {
+    let profileId = profile.id.uuidString
+    ActiveSessionShieldTimerActivity.startOrRestartMonitor(forProfileId: profileId)
+    invokeActiveSessionShieldStartFromHost(forProfileId: profileId)
+  }
+
+  static func removeActiveSessionShieldMonitor(for profileID: UUID) {
+    ActiveSessionShieldTimerActivity.removeMonitor(forProfileId: profileID.uuidString)
+  }
+
+  // MARK: - Host-app mirror of extension (`DeviceActivityMonitor.intervalDidStart`)
+
+  /// Open-source Foqos flow relies on `DeviceActivityMonitor` calling `TimerActivityUtil`
+  /// ([`awaseem/foqos`](https://github.com/awaseem/foqos)). On some iOS versions `intervalDidStart`
+  /// does not run when `startMonitoring` succeeds, so shields never apply once the host suspends.
+  /// Run the same `TimerActivity.start` from the app immediately after scheduling.
+  private static func invokeActiveSessionShieldStartFromHost(forProfileId profileId: String) {
+    guard let snapshot = SharedData.snapshot(for: profileId) else { return }
+    ActiveSessionShieldTimerActivity().start(for: snapshot)
+  }
+
+  private static func invokeStrategyTimerStartFromHost(forProfileId profileId: String) {
+    guard let snapshot = SharedData.snapshot(for: profileId) else { return }
+    StrategyTimerActivity().start(for: snapshot)
+  }
+
+  private static func invokeBreakTimerStartFromHost(forProfileId profileId: String) {
+    guard let snapshot = SharedData.snapshot(for: profileId) else { return }
+    BreakTimerActivity().start(for: snapshot)
+  }
+
+  private static func invokePauseTimerStartFromHost(forProfileId profileId: String) {
+    guard let snapshot = SharedData.snapshot(for: profileId) else { return }
+    PauseTimerActivity().start(for: snapshot)
+  }
+
+  private static func invokeScheduleTimerStartFromHost(for profile: BlockedProfiles) {
+    BlockedProfiles.updateSnapshot(for: profile)
+    guard let snapshot = SharedData.snapshot(for: profile.id.uuidString) else { return }
+    ScheduleTimerActivity().start(for: snapshot)
+  }
+
   private static func stopActivities(
     for activities: [DeviceActivityName], with center: DeviceActivityCenter? = nil
   ) {
@@ -205,29 +252,27 @@ class DeviceActivityCenterUtil {
     center.stopMonitoring(activities)
   }
 
-  private static func getTimeIntervalStartAndEnd(from minutes: Int) -> (
+  /// Device Activity schedules that use clock times without calendar fields (e.g. start 00:00)
+  /// are often already "inside" the interval when monitoring begins, so `intervalDidStart` never
+  /// runs and the monitor extension cannot re-apply Managed Settings after app termination.
+  /// Use full date components from **now** so the interval truly begins at `startMonitoring`.
+  private static func absoluteIntervalFromNow(minutes: Int) -> (
     intervalStart: DateComponents, intervalEnd: DateComponents
   ) {
-    let intervalStart = DateComponents(hour: 0, minute: 0)
-
-    // Get current time
+    let calendar = Calendar.current
     let now = Date()
-    let currentComponents = Calendar.current.dateComponents([.hour, .minute], from: now)
-    let currentHour = currentComponents.hour ?? 0
-    let currentMinute = currentComponents.minute ?? 0
-
-    // Calculate end time by adding minutes to current time
-    let totalMinutes = currentMinute + minutes
-    var endHour = currentHour + (totalMinutes / 60)
-    var endMinute = totalMinutes % 60
-
-    // Cap at 23:59 if it would roll over past midnight
-    if endHour >= 24 || (endHour == 23 && endMinute >= 59) {
-      endHour = 23
-      endMinute = 59
-    }
-
-    let intervalEnd = DateComponents(hour: endHour, minute: endMinute)
+    let effectiveMinutes = max(minutes, 1)
+    let intervalStart = calendar.dateComponents(
+      [.year, .month, .day, .hour, .minute, .second],
+      from: now
+    )
+    let endDate =
+      calendar.date(byAdding: .minute, value: effectiveMinutes, to: now) ?? now.addingTimeInterval(
+        TimeInterval(effectiveMinutes * 60))
+    let intervalEnd = calendar.dateComponents(
+      [.year, .month, .day, .hour, .minute, .second],
+      from: endDate
+    )
     return (intervalStart: intervalStart, intervalEnd: intervalEnd)
   }
 
@@ -249,7 +294,7 @@ class DeviceActivityCenterUtil {
       value: intervalMinutes,
       to: now
     ) else {
-      let (start, end) = getTimeIntervalStartAndEnd(from: minutes)
+      let (start, end) = absoluteIntervalFromNow(minutes: max(intervalMinutes, 1))
       return (intervalStart: start, intervalEnd: end, warningTime: nil)
     }
 

@@ -52,11 +52,14 @@ class ScheduleTimerActivity: TimerActivity {
         // ManagedSettings can be cleared while the main app is suspended or terminated; always
         // re-apply when the schedule interval starts.
         appBlocker.activateRestrictions(for: profile)
+        ActiveSessionShieldTimerActivity.startOrRestartMonitor(forProfileId: profileId)
         return
       } else {
         log.info(
           "Start schedule timer activity for \(profileId), existing session profile does not match device activity profile, ending active session"
         )
+        ActiveSessionShieldTimerActivity.removeMonitor(
+          forProfileId: existingSession.blockedProfileId.uuidString)
         SharedData.endActiveSharedSession()
       }
     }
@@ -66,6 +69,7 @@ class ScheduleTimerActivity: TimerActivity {
 
     // Start restrictions
     appBlocker.activateRestrictions(for: profile)
+    ActiveSessionShieldTimerActivity.startOrRestartMonitor(forProfileId: profileId)
   }
 
   func stop(for profile: SharedData.ProfileSnapshot) {
@@ -86,6 +90,7 @@ class ScheduleTimerActivity: TimerActivity {
 
     // End restrictions
     appBlocker.deactivateRestrictions()
+    ActiveSessionShieldTimerActivity.removeMonitor(forProfileId: profileId)
 
     // End the active scheduled session
     SharedData.endActiveSharedSession()

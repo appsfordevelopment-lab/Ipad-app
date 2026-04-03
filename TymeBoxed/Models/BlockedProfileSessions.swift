@@ -79,6 +79,7 @@ class BlockedProfileSession {
     SharedData.setEndTime(date: endTime)
     self.endTime = endTime
 
+    DeviceActivityCenterUtil.removeActiveSessionShieldMonitor(for: blockedProfile.id)
     SharedData.flushActiveSession()
   }
 
@@ -126,7 +127,9 @@ class BlockedProfileSession {
       newSession.startTime = startTime
     }
 
+    BlockedProfiles.updateSnapshot(for: profile)
     SharedData.createActiveSharedSession(for: newSession.toSnapshot())
+    DeviceActivityCenterUtil.startActiveSessionShieldMonitor(for: profile)
 
     context.insert(newSession)
     return newSession
