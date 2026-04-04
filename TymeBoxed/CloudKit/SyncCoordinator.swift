@@ -72,12 +72,14 @@ class SyncCoordinator: ObservableObject {
               category: .sync)
           }
         }
-        do {
-          try await syncManager.pushEmergencyState()
-        } catch {
-          Log.error(
-            "Failed to push emergency state: \(error.localizedDescription)",
-            category: .sync)
+        if IpadCompanionCloudKitWritePolicy.pushesEmergencyState {
+          do {
+            try await syncManager.pushEmergencyState()
+          } catch {
+            Log.error(
+              "Failed to push emergency state: \(error.localizedDescription)",
+              category: .sync)
+          }
         }
       } catch {
         Log.info("Error pushing local data - \(error)", category: .sync)

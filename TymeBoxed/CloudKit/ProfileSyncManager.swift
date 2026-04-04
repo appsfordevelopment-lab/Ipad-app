@@ -364,6 +364,21 @@ class ProfileSyncManager: ObservableObject {
 
   /// Perform a full sync of all profiles, sessions, and locations
   func performFullSync() async {
+    await performFullSyncInternal(skipSessionRecordsPull: false)
+  }
+
+  /// Fast path: pull and apply `ProfileSession` records only (used by push handling, scene transitions).
+  /// Does not run profile/emergency pull or local push.
+  func refreshRemoteSessionStateFromCloud() async {
+    guard isEnabled else { return }
+    do {
+      try await pullProfileSessionRecords()
+    } catch {
+      Log.info("Session-only CloudKit pull failed – \(error)", category: .sync)
+    }
+  }
+
+  private func performFullSyncInternal(skipSessionRecordsPull: Bool) async {
     guard isEnabled else { return }
 
     self.isSyncing = true
@@ -375,7 +390,9 @@ class ProfileSyncManager: ObservableObject {
 
       // Pull remote changes
       try await pullProfiles()
-      try await pullProfileSessionRecords()  // CAS-based session sync
+      if !skipSessionRecordsPull {
+        try await pullProfileSessionRecords()  // CAS-based session sync
+      }
       try await pullEmergencyState()
 
       // Request push of local data (SyncCoordinator will handle this)
@@ -611,6 +628,10 @@ class ProfileSyncManager: ObservableObject {
   /// Push local emergency-unblock counters (singleton record). Call after user changes or full sync.
   func pushEmergencyState() async throws {
     guard isEnabled else { throw SyncError.syncDisabled }
+    guard IpadCompanionCloudKitWritePolicy.pushesEmergencyState else {
+      Log.info("Skipping emergency CloudKit push (iPad companion read-only for non-profile data)", category: .sync)
+      return
+    }
 
     let recordID = CKRecord.ID(
       recordName: SyncedEmergencyState.singletonRecordName,
@@ -785,11 +806,11 @@ class ProfileSyncManager: ObservableObject {
 
   // MARK: - Remote Change Handling
 
-  /// Minimum interval between CloudKit notification-triggered syncs
-  private static let backgroundSyncThrottleInterval: TimeInterval = 5  // 5 seconds
+  /// Minimum interval between full CloudKit syncs triggered by push (session pull always runs first).
+  private static let backgroundSyncThrottleInterval: TimeInterval = 3  // seconds
 
-  /// Interval for periodic foreground polling sync (fallback for missed push notifications)
-  private static let periodicSyncInterval: TimeInterval = 10  // 10 seconds
+  /// Foreground polling fallback when push is delayed (iPad session stop/start should feel responsive).
+  private static let periodicSyncInterval: TimeInterval = 5  // seconds
 
   /// Start a repeating timer to auto-sync in the foreground
   func startSyncTimer() {
@@ -819,17 +840,24 @@ class ProfileSyncManager: ObservableObject {
   func handleRemoteNotification() async {
     guard isEnabled else { return }
 
-    // Throttle background syncs to prevent memory accumulation from rapid notifications
+    // Always refresh session records first. Throttling used to skip the entire handler, so stopping
+    // on iPhone could leave the iPad timer running until the next foreground or poll.
+    Log.info("Handling remote notification (session records first)", category: .sync)
+    do {
+      try await pullProfileSessionRecords()
+    } catch {
+      Log.info("Profile session pull from push failed – \(error)", category: .sync)
+    }
+
     if let lastSync = lastSyncDate,
       Date().timeIntervalSince(lastSync) < Self.backgroundSyncThrottleInterval
     {
       Log.info(
-        "Skipping background sync, last sync was \(Int(Date().timeIntervalSince(lastSync)))s ago",
+        "Skipping full sync after session refresh (throttled, last full sync \(Int(Date().timeIntervalSince(lastSync)))s ago)",
         category: .sync)
       return
     }
 
-    Log.info("Handling remote notification", category: .sync)
-    await performFullSync()
+    await performFullSyncInternal(skipSessionRecordsPull: true)
   }
 }

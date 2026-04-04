@@ -187,6 +187,14 @@ struct TymeBoxedApp: App {
                 profileSyncManager.startSyncTimer()
               }
             }
+          } else if newPhase == .inactive {
+            // Pull session state as soon as the user leaves the app (e.g. stops timer on iPhone)
+            // instead of waiting only for delayed CloudKit pushes or the next full sync.
+            if profileSyncManager.isEnabled {
+              Task {
+                await profileSyncManager.refreshRemoteSessionStateFromCloud()
+              }
+            }
           } else if newPhase == .background {
             profileSyncManager.stopSyncTimer()
           }

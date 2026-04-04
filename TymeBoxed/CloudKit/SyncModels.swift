@@ -9,6 +9,17 @@ enum CloudKitConstants {
   static let syncZoneName = "DeviceSync"
 }
 
+// MARK: - iPad companion CloudKit writes
+
+/// The iPad app mirrors the iPhone: it pulls session and emergency state from iCloud but must not
+/// write those records. Otherwise stale local/session snapshots can call `SessionSyncService.startSession`
+/// after the phone has stopped, re-activating the session for all devices. Profile records still push
+/// from the iPad when the user edits them locally.
+enum IpadCompanionCloudKitWritePolicy {
+  static let pushesSessionRecords = false
+  static let pushesEmergencyState = false
+}
+
 // MARK: - SyncedProfile
 
 /// CloudKit record for same-user multi-device profile sync (app tokens stay local).

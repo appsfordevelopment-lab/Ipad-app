@@ -42,7 +42,9 @@ class StrategyManager: ObservableObject {
   private var sessionSyncTask: Task<Void, Never>?
 
   private var shouldSyncSessionChange: Bool {
-    SharedData.deviceSyncEnabled && !processingRemoteChange
+    IpadCompanionCloudKitWritePolicy.pushesSessionRecords
+      && SharedData.deviceSyncEnabled
+      && !processingRemoteChange
   }
 
   var isBlocking: Bool {
@@ -510,6 +512,7 @@ class StrategyManager: ObservableObject {
 
   private func postEmergencyStateSync() {
     EmergencyStateSync.markLocallyModifiedNow()
+    guard IpadCompanionCloudKitWritePolicy.pushesEmergencyState else { return }
     Task {
       try? await ProfileSyncManager.shared.pushEmergencyState()
     }
@@ -706,7 +709,7 @@ class StrategyManager: ObservableObject {
         withSnapshot: activeScheduledSession
       )
 
-      if SharedData.deviceSyncEnabled {
+      if SharedData.deviceSyncEnabled, IpadCompanionCloudKitWritePolicy.pushesSessionRecords {
         let previousTask = sessionSyncTask
         sessionSyncTask = Task {
           await previousTask?.value
@@ -746,7 +749,10 @@ class StrategyManager: ObservableObject {
         withSnapshot: completedScheduleSession
       )
 
-      if SharedData.deviceSyncEnabled, let endTime = completedScheduleSession.endTime {
+      if SharedData.deviceSyncEnabled,
+        IpadCompanionCloudKitWritePolicy.pushesSessionRecords,
+        let endTime = completedScheduleSession.endTime
+      {
         let previousTask = sessionSyncTask
         sessionSyncTask = Task {
           await previousTask?.value
